@@ -35,4 +35,4 @@ for filename in os.listdir('./cogs'):
         print(f'Module loaded: {filename[:-3]}')
 
 # Start bot
-bot.run('MTI5NTExMjE2NDc4ODUzNTMxNg.GDSkOx.m7jBhAwJM-b4SHVDLdrl_RqzcjmAOkjQOBfqpI')
+bot.run('')
