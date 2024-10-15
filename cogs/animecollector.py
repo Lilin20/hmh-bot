@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, pages
 import sys
 import os
 import asyncio
@@ -14,6 +14,62 @@ from database import database
 class AnimeCharacterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        
+    @commands.slash_command()
+    async def collection(self, ctx, fancy: bool = False):
+        """Displays the user's collection. Use fancy=True for paginated images."""
+        
+        # Retrieve characters from the database for the user
+        discord_id = ctx.author.id
+        database.cursor.execute(
+            "SELECT collection_id, char_name, char_anime_eng, char_anime_rom, image_url FROM char_inventory WHERE discord_id = %s",
+            (discord_id,)
+        )
+        rows = database.cursor.fetchall()
+
+        if not rows:
+            await ctx.respond("You have no characters in your collection. Kawaii! 🥺")
+            return
+
+        if fancy:
+            # Create paginated embeds with 1 character per page
+            paginated_embeds = []
+            for collection_id, char_name, char_anime_eng, char_anime_rom, image_url in rows:
+                embed = discord.Embed(
+                    title=f"{ctx.author.name}'s Collection",
+                    color=discord.Color.nitro_pink()
+                )
+                embed.add_field(
+                    name=f"ID {collection_id}: {char_name} ({char_anime_rom})",
+                    value=f"Anime: {char_anime_eng}",
+                    inline=False
+                )
+                embed.set_image(url=image_url)
+                embed.set_footer(text=f"Collection ID: {collection_id}", icon_url=ctx.author.avatar.url)
+
+                paginated_embeds.append(embed)
+
+            # Create a paginator with 1 character per page
+            paginator = pages.Paginator(pages=paginated_embeds)
+            await paginator.respond(ctx.interaction, ephemeral=False)
+        
+        else:
+            # Simple embed without pagination
+            embed = discord.Embed(
+                title=f"{ctx.author.name}'s Kawaii Collection",
+                color=discord.Color.nitro_pink()
+            )
+            embed.set_footer(text="Use /collection fancy=True to see more!", icon_url=ctx.author.avatar.url)
+
+            for collection_id, char_name, char_anime_eng, char_anime_rom, _ in rows:
+                embed.add_field(
+                    name=f"ID {collection_id}: {char_name} ({char_anime_rom})",
+                    value=f"Anime: {char_anime_eng}",
+                    inline=False
+                )
+
+            await ctx.respond(embed=embed)
+
 
     @commands.slash_command(name="collect", description="Gives you a random anime character to collect.")
     async def collect(self, ctx: discord.ApplicationContext):
@@ -41,8 +97,17 @@ class AnimeCharacterCog(commands.Cog):
                 button_no.disabled = True
 
                 if interaction.data['custom_id'] == "extend_collection":
+                    
+                    discord_id = interaction.user.id
+                    database.cursor.execute(f"SELECT MAX(collection_id) FROM char_inventory WHERE discord_id = {discord_id}")
+                    result = database.cursor.fetchone()
+                    
+                    new_collection_id = 1
+                    if result[0] is not None:
+                        new_collection_id = result[0] + 1
+                    
+                    database.add_anime_char(discord_id, character["name"], character["anime_title_english"], character["anime_title_romaji"], character["image"], new_collection_id)
                     await interaction.response.send_message("You have added this character to your collection!", ephemeral=True)
-                    database.add_anime_char(interaction.user.id, character["name"], character["anime_title_english"], character["anime_title_romaji"])
                     
                 elif interaction.data['custom_id'] == "not_extend_collection":
                     await interaction.response.send_message("You skipped this character.", ephemeral=True)
